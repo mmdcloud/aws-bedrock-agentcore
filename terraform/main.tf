@@ -98,8 +98,8 @@ resource "null_resource" "initialize_memory" {
 # ---------------------------------------------------------------------
 resource "time_sleep" "wait_for_iam" {
   depends_on = [
-    aws_iam_role_policy.codebuild,
-    aws_iam_role_policy.agent_execution
+    module.codebuild_role,
+    module.agent_execution_role
   ]
 
   create_duration = "30s"
@@ -109,13 +109,31 @@ resource "time_sleep" "wait_for_iam" {
 # S3 Configuration
 # ---------------------------------------------------------------------
 module "agent_source_bucket" {
-  source             = "./modules/s3"
-  bucket_name        = "${var.stack_name}-agent-source-"
-  objects            = []
+  source      = "./modules/s3"
+  bucket_name = "${var.stack_name}-agent-source-"
+  objects = [
+    {
+      key    = "./files/code.zip"
+      source = "code.zip"
+    }
+  ]
   versioning_enabled = "Enabled"
-  cors               = []
-  bucket_policy      = ""
-  force_destroy      = true
+  cors = [
+    {
+      allowed_headers = ["*"]
+      allowed_methods = ["GET"]
+      allowed_origins = ["*"]
+      max_age_seconds = 3000
+    },
+    {
+      allowed_headers = ["*"]
+      allowed_methods = ["PUT"]
+      allowed_origins = ["*"]
+      max_age_seconds = 3000
+    }
+  ]
+  bucket_policy = ""
+  force_destroy = true
   bucket_notification = {
     queue           = []
     lambda_function = []
@@ -131,9 +149,22 @@ module "agent_results_bucket" {
   bucket_name        = "${var.stack_name}-results-"
   objects            = []
   versioning_enabled = "Enabled"
-  cors               = []
-  bucket_policy      = ""
-  force_destroy      = true
+  cors = [
+    {
+      allowed_headers = ["*"]
+      allowed_methods = ["GET"]
+      allowed_origins = ["*"]
+      max_age_seconds = 3000
+    },
+    {
+      allowed_headers = ["*"]
+      allowed_methods = ["PUT"]
+      allowed_origins = ["*"]
+      max_age_seconds = 3000
+    }
+  ]
+  bucket_policy = ""
+  force_destroy = true
   bucket_notification = {
     queue           = []
     lambda_function = []
@@ -141,6 +172,36 @@ module "agent_results_bucket" {
   tags = {
     Name    = "${var.stack_name}-results"
     Purpose = "Store Weather Agent generated artifacts"
+  }
+}
+
+module "codebuild_cache_bucket" {
+  source             = "./modules/s3"
+  bucket_name        = "codebuild-cache-bucket"
+  objects            = []
+  versioning_enabled = "Enabled"
+  cors = [
+    {
+      allowed_headers = ["*"]
+      allowed_methods = ["GET"]
+      allowed_origins = ["*"]
+      max_age_seconds = 3000
+    },
+    {
+      allowed_headers = ["*"]
+      allowed_methods = ["PUT"]
+      allowed_origins = ["*"]
+      max_age_seconds = 3000
+    }
+  ]
+  bucket_policy = ""
+  force_destroy = true
+  bucket_notification = {
+    queue           = []
+    lambda_function = []
+  }
+  tags = {
+    Name = "codebuild-cache-bucket"
   }
 }
 
@@ -367,8 +428,8 @@ module "codebuild" {
   image_pull_credentials_type   = "CODEBUILD"
   privileged_mode               = true
   source_type                   = "S3"
-  source_location               = "${module.agent_source_bucket.id}/${module.agent_source_bucket.key}"
-  buildspec = file("${path.module}/scripts/buildspec.yml")
+  source_location               = "${module.agent_source_bucket.id}/${module.agent_source_bucket.objects[0].key}"
+  buildspec                     = file("${path.module}/scripts/buildspec.yaml")
   source_version                = "frontend"
   environment_variables = [
     {
@@ -518,8 +579,6 @@ resource "aws_cloudwatch_log_delivery" "logs" {
 # ---------------------------------------------------------------------
 # X-Ray Traces Setup
 # ---------------------------------------------------------------------
-
-# Delivery Source for Traces
 resource "aws_cloudwatch_log_delivery_source" "traces" {
   name         = "${module.agentcore_runtime.id}-traces-source"
   log_type     = "TRACES"
@@ -528,7 +587,6 @@ resource "aws_cloudwatch_log_delivery_source" "traces" {
   depends_on = [module.agentcore_runtime]
 }
 
-# Delivery Destination for Traces (X-Ray)
 resource "aws_cloudwatch_log_delivery_destination" "traces" {
   name                      = "${module.agentcore_runtime.id}-traces-destination"
   delivery_destination_type = "XRAY"
@@ -540,7 +598,6 @@ resource "aws_cloudwatch_log_delivery_destination" "traces" {
   }
 }
 
-# Delivery Connection for Traces
 resource "aws_cloudwatch_log_delivery" "traces" {
   delivery_source_name     = aws_cloudwatch_log_delivery_source.traces.name
   delivery_destination_arn = aws_cloudwatch_log_delivery_destination.traces.arn
@@ -556,24 +613,3 @@ resource "aws_cloudwatch_log_delivery" "traces" {
     aws_cloudwatch_log_delivery_destination.traces
   ]
 }
-
-
-# output "log_group_name" {
-#   description = "CloudWatch Log Group name for agent runtime vended logs"
-#   value       = aws_cloudwatch_log_group.agent_runtime_logs.name
-# }
-
-# output "log_group_arn" {
-#   description = "ARN of the CloudWatch Log Group"
-#   value       = aws_cloudwatch_log_group.agent_runtime_logs.arn
-# }
-
-# output "logs_delivery_id" {
-#   description = "ID of the logs delivery connection"
-#   value       = aws_cloudwatch_log_delivery.logs.id
-# }
-
-# output "traces_delivery_id" {
-#   description = "ID of the traces delivery connection"
-#   value       = aws_cloudwatch_log_delivery.traces.id
-# }

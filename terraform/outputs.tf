@@ -26,12 +26,6 @@ output "agent_execution_role_arn" {
 # ============================================================================
 # Build & Storage Outputs
 # ============================================================================
-
-output "codebuild_project_name" {
-  description = "Name of the CodeBuild project for weather agent"
-  value       = aws_codebuild_project.agent_image.name
-}
-
 output "source_bucket_name" {
   description = "S3 bucket containing weather agent source code"
   value       = module.agent_source_bucket.id
@@ -40,11 +34,6 @@ output "source_bucket_name" {
 output "results_bucket_name" {
   description = "Name of the S3 bucket for agent results"
   value       = module.agent_results_bucket.id
-}
-
-output "source_code_md5" {
-  description = "MD5 hash of agent source code (triggers rebuild when changed)"
-  value       = data.archive_file.agent_source.output_md5
 }
 
 # ============================================================================

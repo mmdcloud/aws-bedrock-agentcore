@@ -92,8 +92,8 @@ variable "source_location" {
 
 variable "source_git_clone_depth"  {
   description = "Name of the CodeBuild project"
-  type        = string
-  default     = ""
+  type        = number
+  default     = 0
 }
 
 variable "cloudwatch_group_name" {

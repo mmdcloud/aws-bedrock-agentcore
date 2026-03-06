@@ -41,7 +41,7 @@ resource "aws_codebuild_project" "codebuild_project" {
   source {
     type            = var.source_type
     location        = var.source_location
-    git_clone_depth = var.source_git_clone_depth == null ? "" : var.source_git_clone_depth
+    git_clone_depth = var.source_git_clone_depth == null ? 0 : var.source_git_clone_depth
     buildspec       = var.buildspec == null ? "" : var.buildspec
     git_submodules_config {
       fetch_submodules = var.fetch_submodules == null ? "" : var.fetch_submodules
