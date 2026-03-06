@@ -77,3 +77,18 @@ variable "ecr_repository_name" {
   type        = string
   default     = "weather-agent"
 }
+
+variable "public_subnets" {
+  type        = list(string)
+  description = "Public Subnet CIDR values"
+}
+
+variable "private_subnets" {
+  type        = list(string)
+  description = "Private Subnet CIDR values"
+}
+
+variable "azs" {
+  type        = list(string)
+  description = "Availability Zones"
+}

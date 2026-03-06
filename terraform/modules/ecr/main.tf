@@ -20,6 +20,11 @@ resource "aws_ecr_lifecycle_policy" "lifecycle_policy" {
   policy     = var.lifecycle_policy != "" ? var.lifecycle_policy : null
 }
 
+resource "aws_ecr_repository_policy" "repository_policy" {
+  repository = aws_ecr_repository.repository.name
+  policy = var.repository_policy != "" ? var.repository_policy : null
+}
+
 resource "null_resource" "push_image_to_ecr" {
   provisioner "local-exec" {
     command = var.bash_command

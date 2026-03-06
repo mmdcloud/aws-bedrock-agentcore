@@ -1,18 +1,9 @@
-variable "role_name" {
+variable "stack_name" {
   
 }
-variable "role_description" {
+variable "network_mode" {
   
 }
-variable "assume_role_policy" {
-  
-}
-variable "policy_name" {
-  
-}
-variable "policy_description" {
-  
-}
-variable "policy" {
+variable "common_tags" {
   
 }
