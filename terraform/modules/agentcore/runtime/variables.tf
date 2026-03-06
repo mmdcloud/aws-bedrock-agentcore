@@ -4,9 +4,6 @@ variable "stack_name" {
 variable "network_mode" {
 
 }
-variable "common_tags" {
-
-}
 variable "agent_name" {
 
 }
@@ -17,5 +14,8 @@ variable "environment_variables" {
 
 }
 variable "role_arn" {
+    
+}
+variable "tags" {
     
 }

@@ -21,10 +21,13 @@ module "vpc" {
   single_nat_gateway      = false
   one_nat_gateway_per_az  = true
   tags = {
-    Project = "text-to-sql"
+    Project = "weather-agent"
   }
 }
 
+# ---------------------------------------------------------------------
+# ECR Configuration
+# ---------------------------------------------------------------------
 module "container_registry" {
   source               = "./modules/ecr"
   force_delete         = true
@@ -345,6 +348,65 @@ module "codebuild_role" {
 }
 
 # ---------------------------------------------------------------------
+# CodeBuild Configuration
+# ---------------------------------------------------------------------
+module "codebuild" {
+  source                        = "./modules/codebuild"
+  build_timeout                 = 60
+  cache_bucket_name             = module.codebuild_cache_bucket.bucket
+  cloudwatch_group_name         = "/aws/codebuild/${var.stack_name}-agent-build"
+  cloudwatch_stream_name        = "carshub-codebuiild-frontend-stream"
+  codebuild_project_description = "Build Weather Agent Docker image for ${var.stack_name}"
+  codebuild_project_name        = "${var.stack_name}-agent-build"
+  role                          = module.codebuild_role.arn
+  compute_type                  = "BUILD_GENERAL1_LARGE"
+  env_image                     = "aws/codebuild/amazonlinux2-aarch64-standard:3.0"
+  env_type                      = "ARM_CONTAINER"
+  fetch_submodules              = true
+  force_destroy_cache_bucket    = true
+  image_pull_credentials_type   = "CODEBUILD"
+  privileged_mode               = true
+  source_type                   = "S3"
+  source_location               = "${module.agent_source_bucket.id}/${module.agent_source_bucket.key}"
+  buildspec = file("${path.module}/scripts/buildspec.yml")
+  source_version                = "frontend"
+  environment_variables = [
+    {
+      name  = "AWS_DEFAULT_REGION"
+      value = data.aws_region.current.id
+    },
+    {
+      name  = "AWS_ACCOUNT_ID"
+      value = data.aws_caller_identity.current.id
+    },
+    {
+      name  = "IMAGE_REPO_NAME"
+      value = module.container_registry.name
+    },
+    {
+      name  = "IMAGE_TAG"
+      value = var.image_tag
+    },
+    {
+      name  = "STACK_NAME"
+      value = var.stack_name
+    },
+    {
+      name  = "AGENT_NAME"
+      value = "weather-agent"
+    }
+  ]
+  tags = {
+    Name   = "${var.stack_name}-agent-build"
+    Module = "CodeBuild"
+    Agent  = "WeatherAgent"
+  }
+  depends_on = [
+    module.codebuild_role
+  ]
+}
+
+# ---------------------------------------------------------------------
 # Bedrock Agentcore Configuration
 # ---------------------------------------------------------------------
 module "agentcore_browser" {
@@ -373,9 +435,8 @@ module "agentcore_runtime" {
   source        = "./modules/agentcore/runtime"
   stack_name    = var.stack_name
   agent_name    = var.agent_name
-  container_uri = ""
-  common_tags   = {}
-  role_arn      = ""
+  container_uri = "${module.container_registry.repository_url}:${var.image_tag}"
+  role_arn      = module.agent_execution_role.arn
   network_mode  = var.network_mode
   environment_variables = {
     AWS_REGION          = data.aws_region.current.id
@@ -384,6 +445,12 @@ module "agentcore_runtime" {
     BROWSER_ID          = module.agentcore_browser.browser_id
     CODE_INTERPRETER_ID = module.agentcore_code_interpreter.code_interpreter_id
     MEMORY_ID           = module.agentcore_memory.id
+  }
+  tags = {
+    Name        = "${var.stack_name}-agent-runtime"
+    Environment = "production"
+    Module      = "BedrockAgentCore"
+    Agent       = "WeatherAgent"
   }
 }
 

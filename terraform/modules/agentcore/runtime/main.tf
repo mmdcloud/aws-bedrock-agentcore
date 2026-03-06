@@ -15,10 +15,5 @@ resource "aws_bedrockagentcore_agent_runtime" "weather_agent" {
 
   environment_variables = var.environment_variables
 
-  tags = {
-    Name        = "${var.stack_name}-agent-runtime"
-    Environment = "production"
-    Module      = "BedrockAgentCore"
-    Agent       = "WeatherAgent"  
-  }  
+  tags = var.tags
 }
