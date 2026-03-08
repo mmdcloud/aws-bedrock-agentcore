@@ -47,6 +47,6 @@ resource "aws_codebuild_project" "codebuild_project" {
       fetch_submodules = var.fetch_submodules == null ? "" : var.fetch_submodules
     }
   }
-  source_version = var.source_version
+  source_version = var.source_version == null ? "" : var.source_version
   tags           = var.tags
 }

@@ -2,6 +2,10 @@ data "aws_caller_identity" "current" {}
 
 data "aws_region" "current" {}
 
+resource "random_id" "id" {
+  byte_length = 8
+}
+
 # ---------------------------------------------------------------------
 # VPC Configuration
 # ---------------------------------------------------------------------
@@ -17,9 +21,9 @@ module "vpc" {
   enable_dns_support      = true
   create_igw              = true
   map_public_ip_on_launch = true
-  enable_nat_gateway      = true
+  enable_nat_gateway      = false
   single_nat_gateway      = false
-  one_nat_gateway_per_az  = true
+  one_nat_gateway_per_az  = false
   tags = {
     Project = "weather-agent"
   }
@@ -33,8 +37,8 @@ module "container_registry" {
   force_delete         = true
   scan_on_push         = false
   image_tag_mutability = "IMMUTABLE"
-  bash_command         = "bash ${path.cwd}/scripts/build-image.sh"
-  name                 = "container-registry"
+  #bash_command         = "bash ${path.module}/scripts/build-image.sh ${module.codebuild.project_name} ${data.aws_region.current.id} ${var.ecr_repository_name} ${var.image_tag}"
+  name = var.ecr_repository_name
   repository_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -110,11 +114,11 @@ resource "time_sleep" "wait_for_iam" {
 # ---------------------------------------------------------------------
 module "agent_source_bucket" {
   source      = "./modules/s3"
-  bucket_name = "${var.stack_name}-agent-source-"
+  bucket_name = "${random_id.id.hex}-agent-source"
   objects = [
     {
-      key    = "./files/code.zip"
-      source = "code.zip"
+      key    = "code.zip"
+      source = "./files/code.zip"
     }
   ]
   versioning_enabled = "Enabled"
@@ -139,14 +143,14 @@ module "agent_source_bucket" {
     lambda_function = []
   }
   tags = {
-    Name    = "${var.stack_name}-agent-source"
+    Name    = "${random_id.id.hex}-agent-source"
     Purpose = "Store Weather Agent source code for CodeBuild"
   }
 }
 
 module "agent_results_bucket" {
   source             = "./modules/s3"
-  bucket_name        = "${var.stack_name}-results-"
+  bucket_name        = "${random_id.id.hex}-results"
   objects            = []
   versioning_enabled = "Enabled"
   cors = [
@@ -170,14 +174,14 @@ module "agent_results_bucket" {
     lambda_function = []
   }
   tags = {
-    Name    = "${var.stack_name}-results"
+    Name    = "${random_id.id.hex}-results"
     Purpose = "Store Weather Agent generated artifacts"
   }
 }
 
 module "codebuild_cache_bucket" {
   source             = "./modules/s3"
-  bucket_name        = "codebuild-cache-bucket"
+  bucket_name        = "${random_id.id.hex}-codebuild-cache-bucket"
   objects            = []
   versioning_enabled = "Enabled"
   cors = [
@@ -201,7 +205,7 @@ module "codebuild_cache_bucket" {
     lambda_function = []
   }
   tags = {
-    Name = "codebuild-cache-bucket"
+    Name = "${random_id.id.hex}-codebuild-cache-bucket"
   }
 }
 
@@ -235,87 +239,87 @@ module "agent_execution_role" {
         "Version": "2012-10-17",
         "Statement": [
             {
-              Sid    : "ECRImageAccess"
-              Effect : "Allow"
-              Action : [
+              "Sid"    : "ECRImageAccess",
+              "Effect" : "Allow",
+              "Action" : [
                 "ecr:BatchGetImage",
                 "ecr:GetDownloadUrlForLayer",
                 "ecr:BatchCheckLayerAvailability"
-              ]
-              Resource : "${module.container_registry.arn}"
+              ],
+              "Resource" : "${module.container_registry.arn}"
             },
             {
-              Sid      : "ECRTokenAccess"
-              Effect   : "Allow"
-              Action   : ["ecr:GetAuthorizationToken"]
-              Resource : "*"
+              "Sid"      : "ECRTokenAccess",
+              "Effect"   : "Allow",
+              "Action"   : ["ecr:GetAuthorizationToken"],
+              "Resource" : "*"
             },
             {
-              Sid    : "CloudWatchLogs"
-              Effect : "Allow"
-              Action : [
+              "Sid"    : "CloudWatchLogs",
+              "Effect" : "Allow",
+              "Action" : [
                 "logs:DescribeLogStreams",
                 "logs:CreateLogGroup",
                 "logs:DescribeLogGroups",
                 "logs:CreateLogStream",
                 "logs:PutLogEvents"
-              ]
-              Resource : "arn:aws:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.id}:log-group:/aws/bedrock-agentcore/runtimes/*"
+              ],
+              "Resource" : "arn:aws:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.id}:log-group:/aws/bedrock-agentcore/runtimes/*"
             },
             {
-              Sid    : "XRayTracing"
-              Effect : "Allow"
-              Action : [
+              "Sid"    : "XRayTracing",
+              "Effect" : "Allow",
+              "Action" : [
                 "xray:PutTraceSegments",
                 "xray:PutTelemetryRecords",
                 "xray:GetSamplingRules",
                 "xray:GetSamplingTargets"
-              ]
-              Resource : "*"
+              ],
+              "Resource" : "*"
             },
             {
-              Sid      : "CloudWatchMetrics"
-              Effect   : "Allow"
-              Action   : ["cloudwatch:PutMetricData"]
-              Resource : "*"
-              Condition = {
-                StringEquals = {
-                  "cloudwatch:namespace" = "bedrock-agentcore"
+              "Sid"      : "CloudWatchMetrics",
+              "Effect"   : "Allow",
+              "Action"   : ["cloudwatch:PutMetricData"],
+              "Resource" : "*",
+              "Condition" : {
+                "StringEquals" : {
+                  "cloudwatch:namespace" : "bedrock-agentcore"
                 }
               }
             },
             {
-              Sid    : "BedrockModelInvocation"
-              Effect : "Allow"
-              Action : [
+              "Sid"    : "BedrockModelInvocation",
+              "Effect" : "Allow",
+              "Action" : [
                 "bedrock:InvokeModel",
                 "bedrock:InvokeModelWithResponseStream"
-              ]
-              Resource : "*"
+              ],
+              "Resource" : "*"
             },
             {
-              Sid    : "GetAgentAccessToken"
-              Effect : "Allow"
-              Action : [
+              "Sid"    : "GetAgentAccessToken",
+              "Effect" : "Allow",
+              "Action" : [
                 "bedrock-agentcore:GetWorkloadAccessToken",
                 "bedrock-agentcore:GetWorkloadAccessTokenForJWT",
                 "bedrock-agentcore:GetWorkloadAccessTokenForUserId"
-              ]
-              Resource : [
+              ],
+              "Resource" : [
                 "arn:aws:bedrock-agentcore:${data.aws_region.current.id}:${data.aws_caller_identity.current.id}:workload-identity-directory/default",
                 "arn:aws:bedrock-agentcore:${data.aws_region.current.id}:${data.aws_caller_identity.current.id}:workload-identity-directory/default/workload-identity/*"
               ]
             },
             {
-              Sid    : "S3ResultsAccess"
-              Effect : "Allow"
-              Action : [
+              "Sid"    : "S3ResultsAccess",
+              "Effect" : "Allow",
+              "Action" : [
                 "s3:PutObject",
                 "s3:GetObject",
                 "s3:DeleteObject",
                 "s3:ListBucket"
-              ]
-              Resource : [
+              ],
+              "Resource" : [
                 "${module.agent_results_bucket.arn}",
                 "${module.agent_results_bucket.arn}/*"
               ]
@@ -356,20 +360,19 @@ module "codebuild_role" {
         "Version": "2012-10-17",
         "Statement": [
             {
-              Sid    : "CloudWatchLogs"
-              Effect : "Allow"
-              Action : [
+              "Sid"    : "CloudWatchLogs",
+              "Effect" : "Allow",
+              "Action" : [
                 "logs:CreateLogGroup",
                 "logs:CreateLogStream",
                 "logs:PutLogEvents"
-              ]
-              Resource : "arn:aws:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.id}:log-group:/aws/codebuild/*"
+              ],
+              "Resource" : "arn:aws:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.id}:log-group:/aws/codebuild/*"
             },
-            # ECR Access
             {
-              Sid    : "ECRAccess"
-              Effect : "Allow"
-              Action : [
+              "Sid"    : "ECRAccess",
+              "Effect" : "Allow",
+              "Action" : [
                 "ecr:BatchCheckLayerAvailability",
                 "ecr:GetDownloadUrlForLayer",
                 "ecr:BatchGetImage",
@@ -378,30 +381,27 @@ module "codebuild_role" {
                 "ecr:InitiateLayerUpload",
                 "ecr:UploadLayerPart",
                 "ecr:CompleteLayerUpload"
-              ]
-              Resource : [
-                "${module.container_registry.arn}",
-                "*"
-              ]
+              ],
+              "Resource" : "*"
             },
-            # S3 Source Access
             {
-              Sid    : "S3SourceAccess"
-              Effect : "Allow"
-              Action : [
+              "Sid"    : "S3SourceAccess",
+              "Effect" : "Allow",
+              "Action" : [
                 "s3:GetObject",
                 "s3:GetObjectVersion"
-              ]
-              Resource : "${module.agent_source_bucket.arn}/*"
+              ],
+              "Resource" : "${module.agent_source_bucket.arn}/*"
             },
             {
-              Sid    : "S3BucketAccess"
-              Effect : "Allow"
-              Action : [
+              "Sid"    : "S3BucketAccess",
+              "Effect" : "Allow",
+              "Action" : [
                 "s3:ListBucket",
-                "s3:GetBucketLocation"
-              ]
-              Resource : "${module.agent_source_bucket.arn}"
+                "s3:GetBucketLocation",
+                "s3:ListBucketVersions "
+              ],
+              "Resource" : "${module.agent_source_bucket.arn}"
             }
         ]
     }
@@ -430,7 +430,6 @@ module "codebuild" {
   source_type                   = "S3"
   source_location               = "${module.agent_source_bucket.id}/${module.agent_source_bucket.objects[0].key}"
   buildspec                     = file("${path.module}/scripts/buildspec.yaml")
-  source_version                = "frontend"
   environment_variables = [
     {
       name  = "AWS_DEFAULT_REGION"
@@ -464,6 +463,30 @@ module "codebuild" {
   }
   depends_on = [
     module.codebuild_role
+  ]
+}
+
+# ---------------------------------------------------------------------
+# Build & Push Docker Image to ECR
+# Must complete before agentcore_runtime is created
+# ---------------------------------------------------------------------
+resource "null_resource" "build_and_push_image" {
+  # Re-trigger build if any of these change
+  triggers = {
+    codebuild_project = module.codebuild.project_name
+    image_tag         = var.image_tag
+    source_object     = module.agent_source_bucket.objects[0].key
+  }
+
+  provisioner "local-exec" {
+    command = "bash ${path.module}/scripts/build-image.sh ${module.codebuild.project_name} ${data.aws_region.current.id} ${var.ecr_repository_name} ${var.image_tag}"
+  }
+
+  depends_on = [
+    module.codebuild,
+    module.container_registry,
+    module.agent_source_bucket,
+    time_sleep.wait_for_iam
   ]
 }
 
@@ -573,43 +596,5 @@ resource "aws_cloudwatch_log_delivery" "logs" {
   depends_on = [
     aws_cloudwatch_log_delivery_source.logs,
     aws_cloudwatch_log_delivery_destination.logs
-  ]
-}
-
-# ---------------------------------------------------------------------
-# X-Ray Traces Setup
-# ---------------------------------------------------------------------
-resource "aws_cloudwatch_log_delivery_source" "traces" {
-  name         = "${module.agentcore_runtime.id}-traces-source"
-  log_type     = "TRACES"
-  resource_arn = module.agentcore_runtime.arn
-
-  depends_on = [module.agentcore_runtime]
-}
-
-resource "aws_cloudwatch_log_delivery_destination" "traces" {
-  name                      = "${module.agentcore_runtime.id}-traces-destination"
-  delivery_destination_type = "XRAY"
-
-  tags = {
-    Name    = "${var.stack_name}-traces-destination"
-    Purpose = "X-Ray traces delivery destination"
-    Module  = "Observability"
-  }
-}
-
-resource "aws_cloudwatch_log_delivery" "traces" {
-  delivery_source_name     = aws_cloudwatch_log_delivery_source.traces.name
-  delivery_destination_arn = aws_cloudwatch_log_delivery_destination.traces.arn
-
-  tags = {
-    Name    = "${var.stack_name}-traces-delivery"
-    Purpose = "Connect traces source to X-Ray destination"
-    Module  = "Observability"
-  }
-
-  depends_on = [
-    aws_cloudwatch_log_delivery_source.traces,
-    aws_cloudwatch_log_delivery_destination.traces
   ]
 }

@@ -28,7 +28,6 @@ PROJECT_NAME="$1"
 REGION="$2"
 REPO_NAME="$3"
 IMAGE_TAG="$4"
-REPO_URL="$5"
 
 # ============================================================================
 # Print functions
@@ -65,7 +64,6 @@ print_header "Building Docker Image for AgentCore Runtime"
 
 print_info "CodeBuild Project: $PROJECT_NAME"
 print_info "Region: $REGION"
-print_info "Target Image: $REPO_URL:$IMAGE_TAG"
 echo ""
 
 # Start CodeBuild
@@ -149,8 +147,6 @@ while [ $VERIFY_ATTEMPT -lt $MAX_VERIFY_ATTEMPTS ]; do
     --region "$REGION" >/dev/null 2>&1; then
     
     print_success "Docker image successfully verified in ECR!"
-    echo ""
-    print_info "Image URI: $REPO_URL:$IMAGE_TAG"
     
     # Get image details
     IMAGE_SIZE=$(aws ecr describe-images \
