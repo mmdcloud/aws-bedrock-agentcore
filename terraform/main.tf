@@ -536,6 +536,9 @@ module "agentcore_runtime" {
     Module      = "BedrockAgentCore"
     Agent       = "WeatherAgent"
   }
+  depends_on = [
+    null_resource.build_and_push_image
+  ]
 }
 
 # ---------------------------------------------------------------------
