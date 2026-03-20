@@ -37,8 +37,7 @@ module "container_registry" {
   force_delete         = true
   scan_on_push         = false
   image_tag_mutability = "IMMUTABLE"
-  #bash_command         = "bash ${path.module}/scripts/build-image.sh ${module.codebuild.project_name} ${data.aws_region.current.id} ${var.ecr_repository_name} ${var.image_tag}"
-  name = var.ecr_repository_name
+  name                 = var.ecr_repository_name
   repository_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -71,6 +70,26 @@ module "container_registry" {
       }
     ]
   })
+}
+
+resource "null_resource" "build_and_push_image" {
+  # Re-trigger build if any of these change
+  triggers = {
+    codebuild_project = module.codebuild.project_name
+    image_tag         = var.image_tag
+    source_object     = module.agent_source_bucket.objects[0].key
+  }
+
+  provisioner "local-exec" {
+    command = "bash ${path.module}/scripts/build-image.sh ${module.codebuild.project_name} ${data.aws_region.current.id} ${var.ecr_repository_name} ${var.image_tag}"
+  }
+
+  depends_on = [
+    module.codebuild,
+    module.container_registry,
+    module.agent_source_bucket,
+    time_sleep.wait_for_iam
+  ]
 }
 
 # ---------------------------------------------------------------------
@@ -208,7 +227,6 @@ module "codebuild_cache_bucket" {
     Name = "${random_id.id.hex}-codebuild-cache-bucket"
   }
 }
-
 
 # ---------------------------------------------------------------------
 # IAM Configuration
@@ -467,30 +485,6 @@ module "codebuild" {
 }
 
 # ---------------------------------------------------------------------
-# Build & Push Docker Image to ECR
-# Must complete before agentcore_runtime is created
-# ---------------------------------------------------------------------
-resource "null_resource" "build_and_push_image" {
-  # Re-trigger build if any of these change
-  triggers = {
-    codebuild_project = module.codebuild.project_name
-    image_tag         = var.image_tag
-    source_object     = module.agent_source_bucket.objects[0].key
-  }
-
-  provisioner "local-exec" {
-    command = "bash ${path.module}/scripts/build-image.sh ${module.codebuild.project_name} ${data.aws_region.current.id} ${var.ecr_repository_name} ${var.image_tag}"
-  }
-
-  depends_on = [
-    module.codebuild,
-    module.container_registry,
-    module.agent_source_bucket,
-    time_sleep.wait_for_iam
-  ]
-}
-
-# ---------------------------------------------------------------------
 # Bedrock Agentcore Configuration
 # ---------------------------------------------------------------------
 module "agentcore_browser" {
@@ -542,9 +536,8 @@ module "agentcore_runtime" {
 }
 
 # ---------------------------------------------------------------------
-# Observability Module - CloudWatch Logs and X-Ray Traces Delivery
+# Observability Module - CloudWatch Logs
 # ---------------------------------------------------------------------
-
 # CloudWatch Log Group for vended log delivery
 resource "aws_cloudwatch_log_group" "agent_runtime_logs" {
   name              = "/aws/vendedlogs/bedrock-agentcore/${module.agentcore_runtime.id}"
